@@ -1,0 +1,35 @@
+{
+  "name": "tgbot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon index.js",
+    "db:seed": "knex --knexfile ./config/knex.js seed:run",
+    "db:migrate": "knex --knexfile ./config/knex.js migrate:latest",
+    "db:rollback": "knex --knexfile ./config/knex.js migrate:rollback",
+    "db:make": "knex --knexfile ./config/knex.js migrate:make",
+    "db:down": "knex --knexfile ./config/knex.js migrate:down"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RomanZaiats/tgBot.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/RomanZaiats/tgBot/issues"
+  },
+  "homepage": "https://github.com/RomanZaiats/tgBot#readme",
+  "dependencies": {
+    "axios": "^1.4.0",
+    "knex": "^2.4.2",
+    "node-telegram-bot-api": "^0.61.0",
+    "openai": "^3.2.1",
+    "pg": "^8.10.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}
