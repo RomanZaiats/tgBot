@@ -1,23 +1,18 @@
 // Dependencies
 const TelegramBot = require('node-telegram-bot-api');
-const { Configuration, OpenAIApi } = require('openai');
+//const { Configuration, OpenAIApi } = require('openai');
 const knex = require('knex');
-const axios = require('axios');
-const port = 80;
-const url = 'https://491e-194-44-50-122.ngrok-free.app';
+const _ = require('lodash');
+const url = 'https://c0c3-194-44-57-32.ngrok-free.app';
 const TOKEN = '6298867920:AAEItyjwbgMD9JGP3KlEC-_cDm2WOkj1cco';
 
 const knexConfig = require('./config/knex');
 const knexDb = knex(knexConfig);
 // Configurations
-//const app = express();
-//app.use(bodyParser.json());
 const bot = new TelegramBot(TOKEN, {polling: true});
-const openai = new OpenAIApi(new Configuration({
-  apiKey: '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'
-}));
+
 // This informs the Telegram servers of the new webhook.
-//bot.setWebHook(`${url}/bot${TOKEN}`);
+bot.setWebHook(`${url}/bot${TOKEN}`);
 
 const optionsPerPage = 9; 
 const optionsPerRow = 3; 
@@ -31,7 +26,7 @@ bot.onText(/\/start/, async (msg) => {
   if (user) {
     bot.sendMessage(chatId, `Вітаємо знову ${user.firstName} ${user.lastName}`, {
       "reply_markup": {
-          "keyboard": [["Запис до лікаря"], ["Мої візити"], ["Задати питання"]]
+          "keyboard": [["Запис до лікаря"], ["Мої візити"]]
         }
       });
   } else {
@@ -46,12 +41,14 @@ bot.onText(/\/start/, async (msg) => {
 
     bot.sendMessage(chatId, `Вітаємо ${firstName} ${lastName}`, {
       "reply_markup": {
-            "keyboard": [["Запис до лікаря"], ["Мої візити"], ["Задати питання"]]
+            "keyboard": [["Запис до лікаря"], ["Мої візити"]]
           }
       });
   }
 });
-
+// const openai = new OpenAIApi(new Configuration({
+//   apiKey: ''  put key
+// }));
 bot.onText(/Задати питання/, async (msg) => {
   const chatId = msg.chat.id;
   bot.sendMessage(chatId, `Щоб задати питання, напишіть повідомлення у форматі \n'/ask ... Ваше питання'`);
@@ -95,7 +92,8 @@ bot.onText(/Мої візити/, async (msg) => {
       'd.specialization')
     .innerJoin('users as u', 'u.id', 'a.doctorId')
     .innerJoin('doctors as d', 'd.userId', 'a.doctorId')
-    .where('a.userId', user.id);
+    .where('a.userId', user.id)
+    .orderBy('id');
 
   const req = {
     reply_markup: {
@@ -183,7 +181,7 @@ const addDays = (date, days) => {
   return result.toISOString().slice(0, 10);
 }
 
-const getDateMarkup = (prevCallback) => {
+const getDateMarkup = (prevCallback, docsAppointments) => {
   const inline1 = [];
   const inline2 = [];
   for (let index = 0; index < 6; index++) {
@@ -207,7 +205,7 @@ const getDateMarkup = (prevCallback) => {
   ];
 };
 
-const getTimeMarkup = (prevCallback) => {
+const getTimeMarkup = (prevCallback, bookedHours) => {
   const inline1 = [];
   const inline2 = [];
   const inline3 = [];
@@ -215,22 +213,43 @@ const getTimeMarkup = (prevCallback) => {
   for (let index = 9; index < 18; index++) {
     if (index > 14) {
       const time = `${index}:00`;
-      inline3.push({
-        text: `${time}`,
-        callback_data: `time~${time};${prevCallback}`
-      })
+      if (bookedHours.includes(time)){
+        inline3.push({
+          text: `${time}\u{1F512}`,
+          callback_data: ' '
+        })
+      } else {
+        inline3.push({
+          text: `${time}`,
+          callback_data: `time~${time};${prevCallback}`
+        })
+      };
     } else if (index > 11) {
       const time = `${index}:00`;
-      inline2.push({
-        text: `${time}`,
-        callback_data: `time~${time};${prevCallback}`
-      })
+      if (bookedHours.includes(time)){
+        inline2.push({
+          text: `${time}\u{1F512}`,
+          callback_data: ' '
+        })
+      } else {
+        inline2.push({
+          text: `${time}`,
+          callback_data: `time~${time};${prevCallback}`
+        })
+      };
     } else {
       const time = `${index}:00`;
-      inline1.push({
-        text: `${time}`,
-        callback_data: `time~${time};${prevCallback}`
-      })
+      if (bookedHours.includes(time)){
+        inline1.push({
+          text: `${time}\u{1F512}`,
+          callback_data: ' '
+        })
+      }else {
+        inline1.push({
+          text: `${time}`,
+          callback_data: `time~${time};${prevCallback}`
+        })
+      };
     }
   }
 
@@ -306,11 +325,19 @@ bot.on('callback_query', async (callbackQuery) => {
     const date = callbackQuery.data.split(';')[1].split('~')[1];
     const time = callbackQuery.data.split(';')[0].split('~')[1];
     const doctorsByProf = await knexDb('users').innerJoin('doctors', 'users.id', 'doctors.userId').where({ specialization: profession });
+    const docsAppointments = await knexDb('appointments').whereIn('doctorId', doctorsByProf.map(x => x.userId));
     const info = doctorsByProf.map(x => {
-      return [{
-        text: `${x.firstName} ${x.lastName}`,
-        callback_data: `doc~${x.userId};${callbackQuery.data}`
-      }]
+      if (docsAppointments.find(y => y.datetime === `${date} ${time}` && y.doctorId === x.userId)) {
+        return [{
+          text: `${x.firstName} ${x.lastName}\u{1F512}`,
+          callback_data: ' '
+        }]
+      } else {
+        return [{
+          text: `${x.firstName} ${x.lastName}`,
+          callback_data: `doc~${x.userId};${callbackQuery.data}`
+        }]
+      }
     });
 
     const editedMsg = {
@@ -330,7 +357,17 @@ bot.on('callback_query', async (callbackQuery) => {
   if (callbackQuery.data.startsWith('date')) {
     const profession = callbackQuery.data.split(';')[1].split('~')[1];
     const date = callbackQuery.data.split(';')[0].split('~')[1];
-    const timeMarkup = getTimeMarkup(callbackQuery.data);
+    const doctorsByProf = await knexDb('users').innerJoin('doctors', 'users.id', 'doctors.userId').where({ specialization: profession });
+    const docsAppointments = await knexDb('appointments').whereIn('doctorId', doctorsByProf.map(x => x.userId));
+    const appointsForDate = docsAppointments.filter(x => x.datetime.startsWith(date));
+    const groupedByDateTime = _(appointsForDate)
+      .groupBy(x => x.datetime)
+      .map((value, key) => ({datetime: key, appointments: value}))
+      .value();
+    
+    const bookedHours = groupedByDateTime.filter(x => x.appointments.length === doctorsByProf.length).map(x => x.datetime.substring(11));
+
+    const timeMarkup = getTimeMarkup(callbackQuery.data, bookedHours);
     const editedMsg = {
       chat_id: chatId, 
       message_id: messageId, 
@@ -345,7 +382,9 @@ bot.on('callback_query', async (callbackQuery) => {
 
   if (callbackQuery.data.startsWith('prof')) {
     const profession = callbackQuery.data.split('~')[1];
-    const dateMarkup = getDateMarkup(callbackQuery.data);
+    const doctorsByProf = await knexDb('users').innerJoin('doctors', 'users.id', 'doctors.userId').where({ specialization: profession });
+    const docsAppointments = await knexDb('appointments').whereIn('doctorId', doctorsByProf.map(x => x.userId));
+    const dateMarkup = getDateMarkup(callbackQuery.data, docsAppointments);
     const editedMsg = {
       chat_id: chatId, 
       message_id: messageId, 
